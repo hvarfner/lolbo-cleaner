@@ -4,9 +4,9 @@ from unittest import runner
 
 import torch
 from botorch.acquisition.objective import (
-    AcquisitionObjective,
+    MCAcquisitionObjective,
     IdentityMCObjective,
-    ScalarizedObjective,
+    ScalarizedPosteriorTransform,
 )
 from botorch.generation.utils import _flip_sub_unique
 from botorch.models.model import Model
@@ -52,7 +52,7 @@ class MaxPosteriorSampling(SamplingStrategy):
         self,
         model: Model,
         constraint_models: list = None,
-        objective: Optional[AcquisitionObjective] = None,
+        objective: Optional[MCAcquisitionObjective] = None,
         replacement: bool = True,
         constrained: bool = False,
     ) -> None:
@@ -60,7 +60,7 @@ class MaxPosteriorSampling(SamplingStrategy):
 
         Args:
             model: A fitted model.
-            objective: The objective. Typically, the AcquisitionObjective under which
+            objective: The objective. Typically, the MCAcquisitionObjective under which
                 the samples are evaluated. If a ScalarizedObjective, samples from the
                 scalarized posterior are used. Defaults to `IdentityMCObjective()`.
             replacement: If True, sample with replacement.
