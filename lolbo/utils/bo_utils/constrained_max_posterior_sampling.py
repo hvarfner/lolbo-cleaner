@@ -90,7 +90,7 @@ class MaxPosteriorSampling(SamplingStrategy):
             `X[..., i, :]` is the `i`-th sample.
         """
         posterior = self.model.posterior(X, observation_noise=observation_noise)
-        if isinstance(self.objective, ScalarizedObjective):
+        if isinstance(self.objective, ScalarizedPosteriorTransform):
             posterior = self.objective(posterior)
         samples = posterior.rsample(sample_shape=torch.Size([num_samples]))
 
@@ -130,7 +130,7 @@ class MaxPosteriorSampling(SamplingStrategy):
             samples = torch.where(valid_samples, samples, -torch.inf*torch.ones(samples.shape).cuda()) # bsz x N x 1  ie torch.Size([8, 5000, 1])
         
         
-        if isinstance(self.objective, ScalarizedObjective):
+        if isinstance(self.objective, ScalarizedPosteriorTransform):
             obj = samples.squeeze(-1)  # num_samples x batch_shape x N 
         else:
             obj = self.objective(samples, X=X)  # num_samples x batch_shape x N
