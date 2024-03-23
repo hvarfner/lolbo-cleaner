@@ -1,4 +1,5 @@
 import numpy as np
+from typing import List, Dict, Optional
 import torch 
 import sys 
 sys.path.append("../")
@@ -14,17 +15,17 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
     '''
     def __init__(
         self,
-        task_id='example',
-        task_specific_args=[],
-        path_to_vae_statedict="../your_vae/saved_models/dim512_k1_kl0001_acc94_vivid-cherry-17_model_state_newest.pkl",
-        max_string_length=150, # max string length that VAE can generate
-        dim=1024, # dimension of latent search space 
-        init_vae=True, # whether initialize VAE 
-        constraint_function_ids=[], # list of strings identifying the black box constraint function to use
-        constraint_thresholds=[], # list of corresponding threshold values (floats)
-        constraint_types=[], # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
-        xs_to_scores_dict={},
-        num_calls=0,
+        task_id: str,
+        task_specific_args: List,
+        path_to_vae_statedict: str,
+        max_string_length: int, # max string length that VAE can generate
+        dim: int, # dimension of latent search space 
+        constraint_function_ids: List, # list of strings identifying the black box constraint function to use
+        constraint_thresholds: List, # list of corresponding threshold values (floats)
+        constraint_types: List, # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
+        xs_to_scores_dict: Optional[Dict] = {},
+        num_calls: Optional[int] = 0,
+        init_vae: bool = True, # whether initialize VAE 
     ):
         self.dim                        = dim 
         self.max_string_length          = max_string_length 

@@ -77,7 +77,7 @@ class InfoTransformerVAEOptimization(Optimize):
 
     def compute_train_zs(
         self,
-        bsz=32
+        bsz=8
     ):
         init_zs = []
         # make sure vae is in eval mode 

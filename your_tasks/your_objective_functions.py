@@ -15,7 +15,7 @@ try:
 except:
     print("Inverse Folding Oracle not Availalbe in this environment")
     print("Please use container in docker/inverse_fold/Dockerfile to run IF optimization\n")
-
+from lolbo.utils.mol_utils import smiles_to_desired_scores
 
 class ObjectiveFunction:
     ''' Objective function f, we seek x that MAXIMIZE f(x)'''
@@ -72,7 +72,85 @@ class ExampleObjective(ObjectiveFunction):
             scores_list.append(score)
 
         return scores_list 
+    
 
+class GuacamolObjective(ObjectiveFunction):
+    ''' Example objective funciton length of the input space items
+        This is just a dummy example where the objective is the 
+        avg number of A and M's in the sequence 
+    ''' 
+    def __init__(self, guac_name):
+        super().__init__()
+        self.guac_name = guac_name
+
+    def query_black_box(self, x_list):
+        scores_list = []
+        for x in x_list:
+            scores_list.append(smiles_to_desired_scores(x_list, self.guac_name).item())
+
+        return scores_list 
+
+
+class MentholObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("med1")
+
+        
+class SildenafilObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("pdop")
+
+        
+class PerindoprilRingsObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("adip")
+
+        
+class OsimertinibObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("rano")
+
+        
+class AmlodipineRingsObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("osmb")
+
+        
+class SitagliptinObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("siga")
+
+        
+class ZaleplonObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("zale")
+
+        
+class ValsartanSmartsObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("valt")
+
+        
+class DecorationHopObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("med2")
+
+        
+class ScaffoldHopObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("dhop")
+
+        
+class RanolazineMpoObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("shop")
+
+        
+class FexofenadineObjective(GuacamolObjective):
+    def __init__(self):
+        super().__init__("fexo")
+
+        
 
 class InverseFoldTMScoreObjective(ObjectiveFunction):
     ''' Objective function for optimizing the TM Score between the input sequence 
@@ -108,6 +186,19 @@ whcih specifies which diversity function to use
 any of these objectives when they are initialized 
 '''
 OBJECTIVE_FUNCTIONS_DICT = {
-    'example':ExampleObjective,
-    'if_tm_score':InverseFoldTMScoreObjective,
+    "example":ExampleObjective,
+    "if_tm_score":InverseFoldTMScoreObjective,
+    "med1": MentholObjective,
+    "pdop": SildenafilObjective,
+    "adip": PerindoprilRingsObjective,
+    "rano": OsimertinibObjective,
+    "osmb": AmlodipineRingsObjective,
+    "siga": SitagliptinObjective,
+    "zale": ZaleplonObjective,
+    "valt": ValsartanSmartsObjective,
+    "med2": DecorationHopObjective,
+    "dhop": ScaffoldHopObjective,
+    "shop": RanolazineMpoObjective,
+    "fexo": FexofenadineObjective,
+
 }
