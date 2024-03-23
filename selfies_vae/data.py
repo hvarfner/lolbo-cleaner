@@ -73,7 +73,7 @@ class SELFIESDataset(Dataset):
             for i, v in enumerate(self.vocab)
         }
 
-    def tokenize_selfies(self, selfies_list):   
+    def tokenize_sequence(self, selfies_list):   
         tokenized_selfies = []
         for string in selfies_list: 
             tokenized_selfies.append(list(sf.split_selfies(string)))

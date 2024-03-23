@@ -57,8 +57,7 @@ class InfoTransformerVAEOptimization(Optimize):
         self.constraint_thresholds = constraint_thresholds # list of corresponding threshold values (floats)
         self.constraint_types = constraint_types # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
         
-        super().__init__(**kwargs) 
-
+        super().__init__(**kwargs)
         # add args to method args dict to be logged by wandb 
         self.method_args['opt1'] = locals()
         del self.method_args['opt1']['self']

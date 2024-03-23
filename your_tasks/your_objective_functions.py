@@ -15,7 +15,7 @@ try:
 except:
     print("Inverse Folding Oracle not Availalbe in this environment")
     print("Please use container in docker/inverse_fold/Dockerfile to run IF optimization\n")
-from lolbo.utils.mol_utils import smiles_to_desired_scores
+from lolbo.utils.mol_utils import selfies_to_desired_scores
 
 class ObjectiveFunction:
     ''' Objective function f, we seek x that MAXIMIZE f(x)'''
@@ -84,11 +84,8 @@ class GuacamolObjective(ObjectiveFunction):
         self.guac_name = guac_name
 
     def query_black_box(self, x_list):
-        scores_list = []
-        for x in x_list:
-            scores_list.append(smiles_to_desired_scores(x_list, self.guac_name).item())
-
-        return scores_list 
+        return selfies_to_desired_scores(x_list, self.guac_name).tolist()
+ 
 
 
 class MentholObjective(GuacamolObjective):

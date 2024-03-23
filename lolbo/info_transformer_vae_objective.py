@@ -81,7 +81,7 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         '''
         scores_list = self.objective_function(x)
         return scores_list 
-
+    
 
     def initialize_vae(self):
         ''' Sets self.vae to the desired pretrained vae and 

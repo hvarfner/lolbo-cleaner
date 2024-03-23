@@ -10,6 +10,7 @@ try: # for tdc docking
 except: 
     print("Warning: Failed to import tdc docking oracle, only needed for molecule docking tasks")
 
+import selfies as sf
 from rdkit import Chem
 from rdkit.Chem import Crippen
 import networkx as nx
@@ -68,7 +69,7 @@ def smile_is_valid_mol(smile):
 
 def smile_to_guacamole_score(obj_func_key, smile):
     if smile is None or len(smile)==0:
-        return None
+        return None 
     mol = Chem.MolFromSmiles(smile)
     if mol is None:
         return None
@@ -181,9 +182,10 @@ def smile_to_tdc_docking_score(smiles_str, tdc_oracle, max_smile_len=600, timeou
     return ret_value
 
 
-def smiles_to_desired_scores(smiles_list, task_id=""):
+def selfies_to_desired_scores(selfies_list, task_id=""):
     scores = [] 
-    for smiles_str in smiles_list:
+    for selfies_str in selfies_list:
+        smiles_str, _ = sf.decoder(selfies_str, attribute=True)
         #if task_id == "logp":
         #    score_ = smile_to_penalized_logP(smiles_str)
         #elif task_id == "qed":
