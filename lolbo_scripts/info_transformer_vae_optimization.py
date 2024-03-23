@@ -1,8 +1,12 @@
 import sys
 sys.path.append("../")
+
+from typing import List
 import fire
 from lolbo_scripts.optimize import Optimize
 from lolbo.info_transformer_vae_objective import InfoTransformerVAEObjective
+from uniref_vae.load_vae import load_uniref_vae
+from selfies_vae.load_vae import load_selfies_vae
 import math 
 import pandas as pd 
 import torch 
@@ -22,14 +26,15 @@ class InfoTransformerVAEOptimization(Optimize):
     """
     def __init__(
         self,
-        path_to_vae_statedict: str="../uniref_vae/saved_models/dim512_k1_kl0001_acc94_vivid-cherry-17_model_state_newest.pkl",
-        dim: int=1024,
-        task_specific_args: list=[], # list of additional args to be passed into objective funcion 
-        max_string_length: int=150,
-        constraint_function_ids: list=[], # list of strings identifying the black box constraint function to use
-        constraint_thresholds: list=[], # list of corresponding threshold values (floats)
-        constraint_types: list=[], # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
-        init_data_path: str="../initialization_data/example_init_data.csv",
+        path_to_vae_statedict: str = "../uniref_vae/saved_models/dim512_k1_kl0001_acc94_vivid-cherry-17_model_state_newest.pkl",
+        dim: int = 1024,
+        task_specific_args: List = [], # list of additional args to be passed into objective funcion 
+        max_string_length: int = 150,
+        constraint_function_ids: List = [], # list of strings identifying the black box constraint function to use
+        constraint_thresholds: List = [], # list of corresponding threshold values (floats)
+        constraint_types: List = [], # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
+        vae_load_function: str = "load_uniref_vae",
+        init_data_path: str = "../initialization_data/example_init_data.csv",
         **kwargs,
     ):
         self.path_to_vae_statedict = path_to_vae_statedict
@@ -37,6 +42,10 @@ class InfoTransformerVAEOptimization(Optimize):
         self.max_string_length = max_string_length
         self.task_specific_args = task_specific_args 
         self.init_data_path = init_data_path
+
+        # TODO fix this - currently a rather hacky way to provide the function by which to load the vae
+        self.vae_load_function = eval(vae_load_function)
+
         # To specify constraints, pass in 
         #   1. constraint_function_ids: a list of constraint function ids, 
         #   2. constraint_thresholds: a list of thresholds, 
@@ -65,6 +74,7 @@ class InfoTransformerVAEOptimization(Optimize):
             dim=self.dim, # dimension of latent search space
             constraint_function_ids=self.constraint_function_ids, # list of strings identifying the black box constraint function to use
             constraint_thresholds=self.constraint_thresholds, # list of corresponding threshold values (floats)
+            vae_load_function=self.vae_load_function,
             constraint_types=self.constraint_types, # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
         )
         # if train zs have not been pre-computed for particular vae, compute them 

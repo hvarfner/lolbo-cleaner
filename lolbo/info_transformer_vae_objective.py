@@ -1,11 +1,11 @@
 import numpy as np
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 import torch 
 import sys 
 sys.path.append("../")
 from lolbo.latent_space_objective import LatentSpaceObjective
 from uniref_vae.data import collate_fn
-from uniref_vae.load_vae import load_vae 
+from uniref_vae.load_vae import load_uniref_vae 
 from your_tasks.your_objective_functions import OBJECTIVE_FUNCTIONS_DICT
 from your_tasks.your_blackbox_constraints import CONSTRAINT_FUNCTIONS_DICT 
 
@@ -23,6 +23,7 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         constraint_function_ids: List, # list of strings identifying the black box constraint function to use
         constraint_thresholds: List, # list of corresponding threshold values (floats)
         constraint_types: List, # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
+        vae_load_function: Callable,
         xs_to_scores_dict: Optional[Dict] = {},
         num_calls: Optional[int] = 0,
         init_vae: bool = True, # whether initialize VAE 
@@ -42,7 +43,8 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
                 threshold_type=constraint_types[ix],
             )
             self.constraint_functions.append(cfunc) 
-
+        self.vae_load_function = vae_load_function
+        
         super().__init__(
             num_calls=num_calls,
             xs_to_scores_dict=xs_to_scores_dict,
@@ -85,7 +87,7 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         ''' Sets self.vae to the desired pretrained vae and 
             sets self.dataobj to the corresponding data class 
             used to tokenize inputs, etc. '''
-        self.vae, self.dataobj = load_vae(
+        self.vae, self.dataobj = self.vae_load_function(
             path_to_vae_statedict=self.path_to_vae_statedict,
             dim=self.dim,
             max_string_length=self.max_string_length,

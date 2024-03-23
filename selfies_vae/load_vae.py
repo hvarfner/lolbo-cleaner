@@ -1,16 +1,16 @@
 import sys 
 sys.path.append("../")
-from uniref_vae.transformer_vae_unbounded import InfoTransformerVAE 
-from uniref_vae.data import DataModuleKmers
+from selfies_vae.model_positional_unbounded import InfoTransformerVAE 
+from selfies_vae.data import SELFIESDataModule
 import torch 
 
 # example function to load vae, loads uniref vae 
-def load_uniref_vae(
+def load_selfies_vae(
     path_to_vae_statedict,
     dim=1024, # dim//2
     max_string_length=150,
 ):
-    data_module = DataModuleKmers(
+    data_module = SELFIESDataModule(
         batch_size=10,
         k=1,
         load_data=False,
