@@ -11,6 +11,11 @@ from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.*')
 import os
 os.environ["WANDB_SILENT"] = "True"
+from lolbo.utils.pred_utils import (
+    get_train_test_split, 
+    compute_mll, 
+    compute_rmse
+)
 from lolbo.lolbo import LOLBOState
 from lolbo.latent_space_objective import LatentSpaceObjective
 import signal 
@@ -47,7 +52,7 @@ class Optimize(object):
     def __init__(
         self,
         task_id: str,
-        seed: int=None,
+        seed: int=42,
         track_with_wandb: bool=False,
         wandb_entity: str="",
         wandb_project_name: str="",
@@ -96,7 +101,7 @@ class Optimize(object):
 
         # initialize train data for particular task
         #   must define self.init_train_x, self.init_train_y, and self.init_train_z
-        self.load_train_data()
+        self.load_train_data(seed=self.seed)
         # initialize latent space objective (self.objective) for particular task
         self.initialize_objective()
         assert isinstance(self.objective, LatentSpaceObjective), "self.objective must be an instance of LatentSpaceObjective"
@@ -134,7 +139,7 @@ class Optimize(object):
         return self
 
 
-    def load_train_data(self):
+    def load_train_data(self, seed: int = 42):
         ''' Load in or randomly initialize self.num_initialization_points
             total initial data points to kick-off optimization 
             Must define the following:
@@ -242,6 +247,18 @@ class Optimize(object):
 
         return self 
 
+    def run_prediction(
+            self, 
+            cv_folds: int = 5,
+        ):
+        last_logged_n_calls = 0 # log table + save vae ckpt every log_table_freq oracle calls
+        #main optimization loop 
+        self.load_test_data(self.seed)
+        self.log_data_to_wandb_on_each_loop()
+        # update models end to end when we fail to make
+        print("Updating model end to end")
+        self.lolbo_state.update_models_e2e()
+        print("Updated")
 
     def print_progress_update(self):
         ''' Important data printed each time a new

@@ -7,6 +7,7 @@ from lolbo_scripts.optimize import Optimize
 from lolbo.info_transformer_vae_objective import InfoTransformerVAEObjective
 from uniref_vae.load_vae import load_uniref_vae
 from selfies_vae.load_vae import load_selfies_vae
+import numpy as np
 import math 
 import pandas as pd 
 import torch 
@@ -101,7 +102,7 @@ class InfoTransformerVAEOptimization(Optimize):
         return init_zs
 
 
-    def load_train_data(self):
+    def load_train_data(self, seed: int = 42):
         ''' Load in or randomly initialize self.num_initialization_points
             total initial data points to kick-off optimization 
             Must define the following:
@@ -109,19 +110,27 @@ class InfoTransformerVAEOptimization(Optimize):
                 self.init_train_y (a tensor of scores/y's)
         '''
         df = pd.read_csv(self.init_data_path)
-
-        x = df["x"].values.tolist()  
-        x = x[0:self.num_initialization_points] 
-
-        y = torch.from_numpy(df["y"].values ).float()
-        y = y[0:self.num_initialization_points] 
-        y = y.unsqueeze(-1) 
-
+        gen = np.random.default_rng(seed=seed)
+        point_indices = gen.choice(len(df), size=self.num_initialization_points, replace=False)
+        x = df.loc[point_indices, "x"].to_list() 
+        y = df.loc[point_indices, "y"].to_numpy() 
+        y = torch.from_numpy(y).float().unsqueeze(-1) 
         self.init_train_x = x
         self.init_train_y = y 
         
         return self 
 
+    def load_test_data(self, seed: int = 42):
+        df = pd.read_csv(self.init_data_path)
+        gen = np.random.default_rng(seed=seed)
+        point_indices = gen.choice(len(df), size=self.num_initialization_points, replace=False)
+        not_in_indices = np.ones(len(df))
+        not_in_indices[point_indices] = 0
+        not_in_indices = not_in_indices.astype(np.bool)
+        self.test_x = df.loc[not_in_indices, "x"].to_list() 
+        self.test_y = df.loc[not_in_indices, "y"].to_numpy()
+         
+        
 
 if __name__ == "__main__":
     fire.Fire(InfoTransformerVAEOptimization)

@@ -1,5 +1,7 @@
 import torch
 import gpytorch
+from gpytorch.models import GP
+from gpytorch.likelihoods import Likelihood
 import math
 from gpytorch.mlls import PredictiveLogLikelihood 
 import sys 
@@ -10,7 +12,7 @@ from lolbo.utils.utils import (
     update_constraint_surr_models,
     update_models_end_to_end_with_constraints,
 )
-from lolbo.utils.bo_utils.ppgpr import GPModelDKL
+from lolbo.utils.bo_utils.ppgpr import GPModelDKL, ApproximateGP
 import numpy as np
 
 
@@ -30,6 +32,8 @@ class LOLBOState:
         learning_rte=0.01,
         bsz=10,
         acq_func='ts',
+        gp: GP = GPModelDKL,
+        likelihood: Likelihood = PredictiveLogLikelihood,
         verbose=True,
     ):
         self.objective          = objective         # objective with vae for particular task
@@ -45,8 +49,10 @@ class LOLBOState:
         self.bsz                = bsz               # acquisition batch size
         self.acq_func           = acq_func          # acquisition function (Expected Improvement (ei) or Thompson Sampling (ts))
         self.verbose            = verbose
-
-        assert acq_func in ["ei", "ts"]
+        self.gp = gp
+        
+        self.likelihood = likelihood
+        assert acq_func in ["ei", "ts", "logei"]
         if minimize:
             self.train_y = self.train_y * -1
 
@@ -154,8 +160,8 @@ class LOLBOState:
         for i in range(self.train_c.shape[1]):
             likelihood = gpytorch.likelihoods.GaussianLikelihood().cuda() 
             n_pts = min(self.train_z.shape[0], 1024)
-            c_model = GPModelDKL(self.train_z[:n_pts, :].cuda(), likelihood=likelihood ).cuda()
-            c_mll = PredictiveLogLikelihood(c_model.likelihood, c_model, num_data=self.train_z.size(-2))
+            c_model = self.gp(self.train_z[:n_pts, :].cuda(), likelihood=likelihood ).cuda()
+            c_mll = self.likelihood(c_model.likelihood, c_model, num_data=self.train_z.size(-2))
             c_model = c_model.eval() 
             # c_model = self.model.cuda()
             self.c_models.append(c_model)
@@ -166,8 +172,8 @@ class LOLBOState:
     def initialize_surrogate_model(self ):
         likelihood = gpytorch.likelihoods.GaussianLikelihood().cuda() 
         n_pts = min(self.train_z.shape[0], 1024)
-        self.model = GPModelDKL(self.train_z[:n_pts, :].cuda(), likelihood=likelihood ).cuda()
-        self.mll = PredictiveLogLikelihood(self.model.likelihood, self.model, num_data=self.train_z.size(-2))
+        self.model = self.gp(self.train_z[:n_pts, :].cuda(), likelihood=likelihood ).cuda()
+        self.mll = self.likelihood(self.model.likelihood, self.model, num_data=self.train_z.size(-2))
         self.model = self.model.eval() 
         self.model = self.model.cuda()
 
