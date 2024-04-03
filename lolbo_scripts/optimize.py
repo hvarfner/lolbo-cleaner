@@ -1,7 +1,10 @@
-import torch
-import sys 
-sys.path.append("../")
+import math
+import os
+import sys
 import random
+
+sys.path.append("../")
+import torch
 import numpy as np 
 import pandas as pd
 import fire
@@ -16,7 +19,11 @@ from lolbo.utils.pred_utils import (
     compute_mll, 
     compute_rmse
 )
+from gpytorch.models import GP
+from gpytorch.likelihoods import GaussianLikelihood
+from gpytorch.mlls import ExactMarginalLogLikelihood
 from lolbo.lolbo import LOLBOState
+from lolbo.utils.bo_utils.registry import get_model
 from lolbo.latent_space_objective import LatentSpaceObjective
 import signal 
 import copy 
@@ -60,7 +67,7 @@ class Optimize(object):
         max_n_oracle_calls: int=200_000_000_000,
         learning_rte: float=0.001,
         acq_func: str="ts",
-        bsz: int=10,
+        bsz: int=16,
         num_initialization_points: int=10_000,
         init_n_update_epochs: int=80,
         num_update_epochs: int=2,
@@ -71,6 +78,7 @@ class Optimize(object):
         recenter_only=False,
         log_table_freq=10_000, 
         save_vae_ckpt=False,
+        gp_name: GP = "dkl",
     ):
         signal.signal(signal.SIGINT, self.handler)
         # add all local args to method args dict to be logged by wandb
@@ -113,7 +121,8 @@ class Optimize(object):
         assert torch.is_tensor(self.init_train_z), "load_train_data() must set self.init_train_z to a tensor of zs"
         assert self.init_train_y.shape[0] == len(self.init_train_x), f"load_train_data() must initialize exactly the same number of ys and xs, instead got {self.init_train_y.shape[0]} ys and {len(self.init_train_x)} xs"
         assert self.init_train_z.shape[0] == len(self.init_train_x), f"load_train_data() must initialize exactly the same number of zs and xs, instead got {self.init_train_z.shape[0]} zs and {len(self.init_train_x)} xs"
-
+        
+        gp = get_model(gp_name)
         # initialize lolbo state
         self.lolbo_state = LOLBOState(
             objective=self.objective,
@@ -121,6 +130,7 @@ class Optimize(object):
             train_y=self.init_train_y,
             train_z=self.init_train_z,
             train_c=self.init_train_c,
+            gp=gp,
             minimize=minimize,
             k=k,
             num_update_epochs=num_update_epochs,
@@ -249,7 +259,6 @@ class Optimize(object):
 
     def run_prediction(
             self, 
-            cv_folds: int = 5,
         ):
         last_logged_n_calls = 0 # log table + save vae ckpt every log_table_freq oracle calls
         #main optimization loop 
@@ -259,6 +268,34 @@ class Optimize(object):
         print("Updating model end to end")
         self.lolbo_state.update_models_e2e()
         print("Updated")
+        
+        gp = self.lolbo_state.model        
+        bsize = self.lolbo_state.bsz
+        num_test = len(self.test_x)
+        num_batches = math.ceil(num_test / bsize)
+        # squared error
+        pred_se = torch.ones(len(self.test_x))
+        # marginal loglik
+
+        mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
+        pred_mll = torch.ones(len(self.test_x))
+        for batch_idx in range(num_batches):
+            print(f"{batch_idx+1}/{num_batches}")
+            batch_lb, batch_ub = batch_idx * bsize, min(num_test, (batch_idx + 1) * bsize)
+            x_batch = self.test_x[batch_lb: batch_ub]
+            z_batch, _ = self.objective.vae_forward(x_batch)
+            y_batch = self.test_y[batch_lb:batch_ub].to(z_batch)
+            post = gp.posterior(z_batch)
+            pred_se[batch_lb: batch_ub] = torch.pow(post.mean - y_batch, 2).cpu().detach().squeeze(-1)
+            pred_mll[batch_lb: batch_ub] = mll(post.mvn, y_batch).cpu().detach()
+        
+        mll, rmse = pred_mll.mean(), pred_se.mean().sqrt()
+        res = {"mll": [mll.item()], "rmse": [rmse.item()]}
+        
+        os.makedirs(f"../pred_results/{self.task_id}", exist_ok=True)
+        pd.DataFrame(res).to_csv(f"../pred_results/{self.task_id}/pred_{self.task_id}_{self.seed}.csv")
+                
+        
 
     def print_progress_update(self):
         ''' Important data printed each time a new
@@ -320,7 +357,7 @@ class Optimize(object):
             model = model.cpu() 
             save_dir = 'finetuned_vae_ckpts/'
             if not os.path.exists(save_dir):
-                os.mkdir(save_dir)
+                os.mkdir(save_dir, exist_ok=True)
             model_save_path = save_dir + self.wandb_project_name + '_' + wandb.run.name + f'_finedtuned_vae_state_after_{n_calls}evals.pkl'  
             torch.save(model.state_dict(), model_save_path) 
 

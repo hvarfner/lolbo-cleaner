@@ -36,6 +36,7 @@ class InfoTransformerVAEOptimization(Optimize):
         constraint_types: List = [], # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
         vae_load_function: str = "load_uniref_vae",
         init_data_path: str = "../initialization_data/example_init_data.csv",
+        data_subset: float = 1,
         **kwargs,
     ):
         self.path_to_vae_statedict = path_to_vae_statedict
@@ -57,7 +58,8 @@ class InfoTransformerVAEOptimization(Optimize):
         self.constraint_function_ids = constraint_function_ids # list of strings identifying the black box constraint function to use
         self.constraint_thresholds = constraint_thresholds # list of corresponding threshold values (floats)
         self.constraint_types = constraint_types # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
-        
+        self.data_subset = data_subset
+
         super().__init__(**kwargs)
         # add args to method args dict to be logged by wandb 
         self.method_args['opt1'] = locals()
@@ -110,6 +112,8 @@ class InfoTransformerVAEOptimization(Optimize):
                 self.init_train_y (a tensor of scores/y's)
         '''
         df = pd.read_csv(self.init_data_path)
+        df = df.loc[0:int(len(df) * self.data_subset)]
+
         gen = np.random.default_rng(seed=seed)
         point_indices = gen.choice(len(df), size=self.num_initialization_points, replace=False)
         x = df.loc[point_indices, "x"].to_list() 
@@ -122,15 +126,17 @@ class InfoTransformerVAEOptimization(Optimize):
 
     def load_test_data(self, seed: int = 42):
         df = pd.read_csv(self.init_data_path)
+        df = df.loc[0:int(len(df) * self.data_subset)]
+
         gen = np.random.default_rng(seed=seed)
         point_indices = gen.choice(len(df), size=self.num_initialization_points, replace=False)
         not_in_indices = np.ones(len(df))
         not_in_indices[point_indices] = 0
         not_in_indices = not_in_indices.astype(np.bool)
         self.test_x = df.loc[not_in_indices, "x"].to_list() 
-        self.test_y = df.loc[not_in_indices, "y"].to_numpy()
+        self.test_y = torch.from_numpy(df.loc[not_in_indices, "y"].to_numpy()).float().unsqueeze(-1)
          
-        
+
 
 if __name__ == "__main__":
     fire.Fire(InfoTransformerVAEOptimization)
