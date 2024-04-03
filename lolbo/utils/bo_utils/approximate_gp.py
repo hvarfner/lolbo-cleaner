@@ -215,7 +215,6 @@ class _SingleTaskVariationalGP(ApproximateGP):
                 (default: pivoted cholesky).
         """
         # we use the model subclass wrapper to deal with input / outcome transforms
-
         batch_shape = train_X.shape[:-2]
         if num_outputs > 1:
             batch_shape = torch.Size((num_outputs,)) + batch_shape

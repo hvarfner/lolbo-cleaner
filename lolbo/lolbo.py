@@ -12,7 +12,7 @@ from lolbo.utils.utils import (
     update_constraint_surr_models,
     update_models_end_to_end_with_constraints,
 )
-from lolbo.utils.bo_utils.ppgpr import GPModelDKL, ApproximateGP
+from lolbo.utils.bo_utils.ppgpr import GPModelDKL, GPModel, ApproximateGP
 import numpy as np
 
 
@@ -30,15 +30,16 @@ class LOLBOState:
         num_update_epochs=2,
         init_n_epochs=20,
         learning_rte=0.01,
-        bsz=10,
+        bsz=16,
         acq_func='ts',
         gp: GP = GPModelDKL,
         likelihood: Likelihood = PredictiveLogLikelihood,
         verbose=True,
+        normalize_y: bool = True
     ):
         self.objective          = objective         # objective with vae for particular task
         self.train_x            = train_x           # initial train x data
-        self.train_y            = train_y           # initial train y data
+        self.orig_train_y       = train_y           # initial train y data
         self.train_z            = train_z           # initial train z data
         self.train_c            = train_c           # initial constraint values data
         self.minimize           = minimize          # if True we want to minimize the objective, otherwise we assume we want to maximize the objective
@@ -54,7 +55,11 @@ class LOLBOState:
         self.likelihood = likelihood
         assert acq_func in ["ei", "ts", "logei"]
         if minimize:
-            self.train_y = self.train_y * -1
+            self.orig_train_y = self.orig_train_y * -1
+        
+        self.normalize_y = normalize_y
+        self._normalize_y()
+ 
 
         self.progress_fails_since_last_e2e = 0
         self.tot_num_e2e_updates = 0
@@ -62,24 +67,34 @@ class LOLBOState:
         # self.best_x_seen = train_x[torch.argmax(train_y.squeeze())]
         self.initial_model_training_complete = False # initial training of surrogate model uses all data for more epochs
         self.new_best_found = False
-
+        
         self.initialize_top_k()
         self.initialize_surrogate_model()
         self.initialize_tr_state()
         self.initialize_xs_to_scores_dict()
 
+    def _normalize_y(self):
+        if self.normalize_y:
+            self.ystd = self.orig_train_y.std()
+            self.ymean = self.orig_train_y.mean()
+            self.train_y = (self.orig_train_y - self.ymean) / self.ystd
+        else:
+            self.train_y = self.orig_train_y
+            self.ystd = 1
+            self.ymean = 0
 
     def initialize_xs_to_scores_dict(self,):
         # put initial xs and ys in dict to be tracked by objective
         init_xs_to_scores_dict = {}
         for idx, x in enumerate(self.train_x):
-            init_xs_to_scores_dict[x] = self.train_y.squeeze()[idx].item()
+            init_xs_to_scores_dict[x] = self.orig_train_y.squeeze()[idx].item()
         self.objective.xs_to_scores_dict = init_xs_to_scores_dict
 
 
     def initialize_top_k(self):
         ''' Initialize top k x, y, and zs'''
         # if we have constriants, the top k are those that meet constraints!
+        self._normalize_y()
         if self.train_c is not None: 
             bool_arr = torch.all(self.train_c <= 0, dim=-1) # all constraint values <= 0
             vaid_train_y = self.train_y[bool_arr]
@@ -123,24 +138,25 @@ class LOLBOState:
 
 
     def initialize_tr_state(self):
+        self._normalize_y()
         if self.train_c is not None:  # if constrained 
             bool_arr = torch.all(self.train_c <= 0, dim=-1) # all constraint values <= 0
-            vaid_train_y = self.train_y[bool_arr]
+            valid_train_y = self.orig_train_y[bool_arr]
             valid_c_vals = self.train_c[bool_arr]
         else:
-            vaid_train_y = self.train_y
+            valid_train_y = self.train_y
             best_constraint_values = None
         
-        if len(vaid_train_y) == 0:
+        if len(valid_train_y) == 0:
             best_value = -torch.inf 
             if self.minimize:
                 best_value = torch.inf
             if self.train_c is not None: 
                 best_constraint_values = torch.ones(1,self.train_c.shape[1])*torch.inf
         else:
-            best_value=torch.max(vaid_train_y).item()
+            best_value=torch.max(valid_train_y).item()
             if self.train_c is not None: 
-                best_constraint_values = valid_c_vals[torch.argmax(vaid_train_y)]
+                best_constraint_values = valid_c_vals[torch.argmax(valid_train_y)]
                 if len(best_constraint_values.shape) == 1:
                     best_constraint_values = best_constraint_values.unsqueeze(-1) 
         # initialize turbo trust region state
@@ -245,7 +261,7 @@ class LOLBOState:
                 C_next=c_next_,
             )
         self.train_z = torch.cat((self.train_z, z_next_), dim=-2)
-        self.train_y = torch.cat((self.train_y, y_next_), dim=-2)
+        self.orig_train_y = torch.cat((self.orig_train_y, y_next_), dim=-2)
         if c_next_ is not None:
             self.train_c = torch.cat((self.train_c, c_next_), dim=-2)
 
@@ -253,6 +269,7 @@ class LOLBOState:
 
 
     def update_surrogate_model(self): 
+        self._normalize_y()
         if not self.initial_model_training_complete:
             # first time training surr model --> train on all data
             n_epochs = self.init_n_epochs
@@ -294,6 +311,7 @@ class LOLBOState:
 
     def update_models_e2e(self):
         '''Finetune VAE end to end with surrogate model'''
+        self._normalize_y()
         self.progress_fails_since_last_e2e = 0
         new_xs = self.train_x[-self.bsz:]
         new_ys = self.train_y[-self.bsz:].squeeze(-1).tolist()
@@ -315,6 +333,9 @@ class LOLBOState:
                 train_c = new_cs 
             # train_c = torch.tensor(new_cs + self.top_k_cs).float() 
 
+        # TODO re-consider this
+        #train_x = self.train_x
+        #train_y = self.train_y
         self.objective, self.model = update_models_end_to_end_with_constraints(
             train_x=train_x,
             train_y_scores=train_y,
