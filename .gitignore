@@ -1,3 +1,7 @@
+*.sh
+pred_results/
+selfies_vae/init/
+selfies_vae/*.csv
 wandb/
 wandb/*
 __pycache__/
