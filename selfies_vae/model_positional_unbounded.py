@@ -230,12 +230,10 @@ class InfoTransformerVAE(pl.LightningModule):
 
     def forward(self, tokens):
         mu, sigma = self.encode(tokens)
-
         if self.is_autoencoder:
             z = mu
         else:
             z = self.sample_posterior(mu, sigma)
-
         logits = self.decode(z, tokens)
 
         recon_loss = F.cross_entropy(logits.permute(0, 2, 1), tokens, reduction='none').mean()  # .sum(1).mean(0)
@@ -258,6 +256,8 @@ class InfoTransformerVAE(pl.LightningModule):
             recon_token_acc=(logits.argmax(dim=-1) == tokens).float().mean(),
             recon_string_acc=(logits.argmax(dim=-1) == tokens).all(dim=1).float().mean(dim=0),
             sigma_mean=sigma.mean(),
+            mu=mu, 
+            sigma=sigma
         )
 
 

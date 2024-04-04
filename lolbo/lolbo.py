@@ -35,7 +35,8 @@ class LOLBOState:
         gp: GP = GPModelDKL,
         likelihood: Likelihood = PredictiveLogLikelihood,
         verbose=True,
-        normalize_y: bool = True
+        normalize_y: bool = True,
+        freeze_vae: bool = False,
     ):
         self.objective          = objective         # objective with vae for particular task
         self.train_x            = train_x           # initial train x data
@@ -50,8 +51,8 @@ class LOLBOState:
         self.bsz                = bsz               # acquisition batch size
         self.acq_func           = acq_func          # acquisition function (Expected Improvement (ei) or Thompson Sampling (ts))
         self.verbose            = verbose
-        self.gp = gp
-        
+        self.gp                 = gp
+        self.freeze_vae         = freeze_vae
         self.likelihood = likelihood
         assert acq_func in ["ei", "ts", "logei"]
         if minimize:
@@ -333,9 +334,9 @@ class LOLBOState:
                 train_c = new_cs 
             # train_c = torch.tensor(new_cs + self.top_k_cs).float() 
 
-        # TODO re-consider this
-        #train_x = self.train_x
-        #train_y = self.train_y
+        # TODO re-consider this - overwriting for now to just do prediction and not optimization
+        train_x = self.train_x
+        train_y = self.train_y.squeeze(-1)
         self.objective, self.model = update_models_end_to_end_with_constraints(
             train_x=train_x,
             train_y_scores=train_y,
@@ -347,6 +348,7 @@ class LOLBOState:
             train_c_scores=train_c,
             c_models=c_models,
             c_mlls=c_mlls,
+            freeze_vae=self.freeze_vae,
         )
         self.tot_num_e2e_updates += 1
 

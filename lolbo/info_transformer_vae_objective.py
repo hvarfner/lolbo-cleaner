@@ -94,14 +94,14 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         )
 
 
-    def vae_forward(self, xs_batch):
+    def vae_forward(self, xs_batch, return_mu_sigma: bool = False):
         ''' Input: 
                 a list xs 
             Output: 
                 z: tensor of resultant latent space codes 
                     obtained by passing the xs through the encoder
                 vae_loss: the total loss of a full forward pass
-                    of the batch of xs through the vae 
+                    of the batch of xs through the vae  
                     (ie reconstruction error)
         '''
         # assumes xs_batch is a batch of smiles strings 
@@ -109,10 +109,12 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         encoded_seqs = [self.dataobj.encode(seq).unsqueeze(0) for seq in tokenized_seqs]
         X = collate_fn(encoded_seqs)
         dict = self.vae(X.cuda())
-        vae_loss, z = dict['loss'], dict['z'] 
+        vae_loss, z, z_mu, z_sigma = dict['loss'], dict['z'], dict['mu'], dict['sigma'] 
         z = z.reshape(-1,self.dim) 
-
-
+        z_mu = z_mu.reshape(-1,self.dim)
+        z_sigma = z_sigma.reshape(-1,self.dim)
+        if return_mu_sigma:
+            return z, vae_loss, z_mu, z_sigma
         return z, vae_loss
 
     # black box constraint, treat as oracle 
