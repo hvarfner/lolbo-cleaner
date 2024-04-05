@@ -96,10 +96,14 @@ def update_models_end_to_end_with_constraints(
             # This is also only for the new training loop - please disregard
             if train_on_z:
                 _, vae_loss, z_mu, z_sigma = objective.vae_forward(batch_list, return_mu_sigma=train_on_z)
+                if freeze_vae:
+                    z_mu = z_mu.detach() 
+                    z_sigma = z_sigma.detach()
                 pred = model(z_mu, z2_cov=z_sigma)
-
+                
             else:
                 z, vae_loss = objective.vae_forward(batch_list)
+                z = z.detach()
                 pred = model(z)
             
             surr_loss = -mll(pred, batch_y.cuda())

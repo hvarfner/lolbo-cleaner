@@ -20,24 +20,33 @@ class ZRBFKernel(RBFKernel):
         ):
         # if cov is not specified, it is assumed that we are passing a latent-space point (i.e.)
         # we revert back to and RBG
-        if z1_cov is not None:
-            assert z1_cov.ndim == 2
-            if z1_cov.ndim == 2:
-                z1_cov = torch.diag_embed(z1_cov)
-
-        if z2_cov is not None:
-            if z2_cov.ndim == 2:
-                z2_cov = torch.diag_embed(z2_cov)
-        cov_l = super().forward(z2_mean, z2_mean)
+        if z1_cov is not None and z2_cov is not None:
+            A = (self.lengthscale ** 2 + z1_cov + z2_cov).rsqrt() * self.lengthscale
+            x1 = z1_mean * A
+            x2 = z2_mean * A
+            return super().forward(x1, x2) * torch.prod(A, dim=-1)
         
-        cov
+        elif z1_cov is not None:
+            assert z1_mean.shape == z1_cov.shape, f"Shape mismatch, mean: {z1_mean.shape}, cov: {z1_cov.shape}"
+            #print("insize z1")
+            # only applies to diagonal covariances (for now, may generaize if the VAE does to)
+            # but for now, we will take the computational saving instead
+            B = (self.lengthscale ** 2 + z1_cov).rsqrt() * self.lengthscale
+            x1 = z2_mean * B
+            return super().forward(x1, z2_mean) * torch.prod(B, dim=-1)
 
-
-        x1, x2 = self._transform_input_dist(z1, z2)
-        # TODO this should be the actual determinant and not the logdet
-        return torch.logdet(A).exp() * super().forward(x1, x2, diag, **params)
+        elif z2_cov is not None:
+            assert z2_mean.shape == z2_cov.shape, f"Shape mismatch, mean: {z2_mean.shape}, cov: {z2_cov.shape}"
+            # only applies to diagonal covariances (for now, may generaize if the VAE does to)
+            # but for now, we will take the computational saving instead
+            #print('z2_cov.shape', z2_cov.shape)
+            #print('z1_mean.shape', z1_mean.shape)
+            B = (self.lengthscale ** 2 + z2_cov).rsqrt() * self.lengthscale
+            #print(z2_mean.shape, B.shape)
+            x2 = z2_mean * B
+            #print('x2.shape', x2.shape)
+            #print('both', super().forward(z1_mean, x2).shape, torch.prod(B, dim=-1).shape)
+            return super().forward(z1_mean, x2) * torch.prod(B, dim=-1)
     
-    
-    def _transform_input_dist(z1: Tensor, z2: Tensor):
-        pass
-        
+        else:
+            return super().forward(z1_mean, z2_mean)
