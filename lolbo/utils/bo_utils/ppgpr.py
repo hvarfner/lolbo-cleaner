@@ -4,9 +4,11 @@ from .base import DenseNetwork
 import gpytorch
 from gpytorch.models import ApproximateGP, ExactGP
 from gpytorch.variational import CholeskyVariationalDistribution
-from gpytorch.variational import (
+from lolbo.utils.variational_mods.variational_strategy import (
      VariationalStrategy, 
-     UnwhitenedVariationalStrategy
+)
+from lolbo.utils.variational_mods.unwhitened_variational_strategy import (
+     UnwhitenedVariationalStrategy, 
 )
 from gpytorch.priors import LogNormalPrior
 from botorch.posteriors.gpytorch import GPyTorchPosterior
