@@ -1,7 +1,9 @@
 import torch
 import math
 from torch.utils.data import TensorDataset, DataLoader
+from lolbo.utils.bo_utils.ppgpr import ZGPModel
 from lolbo.utils.bo_utils.zrbf import ZRBFKernel
+from gpytorch.distributions import MultivariateNormal
 
 
 def update_models_end_to_end_unconstrained(
@@ -79,15 +81,16 @@ def update_models_end_to_end_with_constraints(
     # max batch size smaller to avoid memory limit with longer strings (more tokens)
     max_string_length = len(max(train_x, key=len))
     bsz = max(1, int(2560/max_string_length)) 
+    bsz     = 16
     num_batches = math.ceil(len(train_x) / bsz)
 
     # This is the new kernel, checking for it here to do the alternative training
     train_on_z = isinstance(model.covar_module.base_kernel, ZRBFKernel)
     
-    for _ in range(num_update_epochs):
-
+    for ep in range(num_update_epochs):
+        
         for batch_ix in range(num_batches):
-            
+            print(f"{ep+1}/{num_update_epochs} -- {batch_ix+1}/{num_batches}")
             start_idx, stop_idx = batch_ix*bsz, (batch_ix+1)*bsz
             batch_list = train_x[start_idx:stop_idx]
             batch_y = train_y_scores[start_idx:stop_idx]
@@ -99,12 +102,15 @@ def update_models_end_to_end_with_constraints(
                 if freeze_vae:
                     z_mu = z_mu.detach() 
                     z_sigma = z_sigma.detach()
-                pred = model(z_mu, z2_cov=z_sigma)
+                #z = MultivariateNormal(z_mu, torch.diag_embed(z_sigma))
+                #z_mu = ZTensor(z_mu)
+                    
+                pred = model(z_mu, z_cov=z_sigma, is_z=z_mu)
                 
             else:
-                z, vae_loss = objective.vae_forward(batch_list)
+                z, vae_loss, z_mu, z_sigma = objective.vae_forward(batch_list, return_mu_sigma=True)
                 z = z.detach()
-                pred = model(z)
+                pred = model(z_mu)
             
             surr_loss = -mll(pred, batch_y.cuda())
             

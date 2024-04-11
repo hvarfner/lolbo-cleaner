@@ -20,6 +20,8 @@ from lolbo.utils.pred_utils import (
     compute_mll, 
     compute_rmse
 )
+from lolbo.utils.bo_utils.ppgpr import ZGPModel
+from lolbo.utils.bo_utils.zrbf import ZRBFKernel
 from gpytorch.models import GP
 from gpytorch.likelihoods import GaussianLikelihood
 from gpytorch.mlls import ExactMarginalLogLikelihood
@@ -283,6 +285,7 @@ class Optimize(object):
         num_batches = math.ceil(num_test / bsize)
         # squared error
         pred_se = torch.ones(len(test_x))
+        gp.eval()
         # marginal loglik
         mean, std = self.lolbo_state.ymean, self.lolbo_state.ystd
         mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
@@ -293,18 +296,24 @@ class Optimize(object):
             print(f"{batch_idx+1}/{num_batches}")
             batch_lb, batch_ub = batch_idx * bsize, min(num_test, (batch_idx + 1) * bsize)
             x_batch = test_x[batch_lb: batch_ub]
-            z_batch, _ = self.objective.vae_forward(x_batch)
-            y_batch = test_y[batch_lb:batch_ub].to(z_batch)
-            post = gp.posterior(z_batch)
+            if isinstance(gp.covar_module.base_kernel, ZRBFKernel):
+                _, vae_loss, z_mu, z_sigma = self.objective.vae_forward(x_batch, return_mu_sigma=True)
+                y_batch = test_y[batch_lb:batch_ub].to(z_mu).squeeze(-1)
+                post = gp(z_mu, z_cov=z_sigma, is_z=z_mu)
+                
+            else:
+                z_batch, _, z_mu, z_sigma = self.objective.vae_forward(x_batch, return_mu_sigma=True)
+                y_batch = test_y[batch_lb:batch_ub].to(z_mu).squeeze(-1)
+                post = gp.posterior(z_mu)
             pred_means[batch_lb: batch_ub] = post.mean.cpu().detach().squeeze(-1)
             pred_stds[batch_lb: batch_ub] = post.variance.sqrt().cpu().detach().squeeze(-1)
-            pred_se[batch_lb: batch_ub] = torch.pow(post.mean - (y_batch - mean) / std, 2).cpu().detach().squeeze(-1)
+            pred_se[batch_lb: batch_ub] = torch.pow(post.mean.squeeze(-1) - (y_batch - mean) / std, 2).cpu().detach()
 
             # and for the MLL
             #pred_mll[batch_lb: batch_ub] = mll(post.mvn, (y_batch - mean) / std).cpu().detach()
             norm_obs = (y_batch - mean) / std
 
-            pred_mll[batch_lb: batch_ub] = Normal(post.mean, post.variance.sqrt()).log_prob((norm_obs)).cpu().detach().flatten()
+            pred_mll[batch_lb: batch_ub] = Normal(post.mean.squeeze(-1), post.variance.sqrt().squeeze(-1)).log_prob((norm_obs)).cpu().detach().flatten()
             
         mll_mean, mll_median, rmse, median_se = pred_mll.mean().item(), pred_mll.median().item(), pred_se.mean().item(), pred_se.median().item()
         res = {"mll_mean": [mll_mean], "mll_median": [mll_median], "rmse": rmse, "median_se": median_se}
@@ -321,14 +330,78 @@ class Optimize(object):
         plt.rcParams['font.family'] = 'serif'
         with torch.no_grad():
             plt.plot(range_, range_, color='blue', linestyle="dashed")
+            plt.vlines(sorted_output, sorted_means - 2 * sorted_stds, sorted_means + 2 * sorted_stds, color="grey", alpha=0.15, linewidth=0.1)
             plt.scatter(sorted_output, sorted_means, color="black", s=5)
-            plt.vlines(sorted_output, sorted_means - 2 * sorted_stds, sorted_means + 2 * sorted_stds, color="grey", alpha=0.5, linewidth=0.3)
         
         plt.title(f"{self.gp_name}_{self.task_id}_{self.seed}\nRMSE: {round(rmse * std.item(), 5)}, -- MLL: {round(mll_mean, 3)}", fontsize=16)
         
         os.makedirs(f"../pred_results/{self.task_id}/{self.gp_name}", exist_ok=True)
         plt.savefig(f"../pred_results/{self.task_id}/{self.gp_name}/pred_{self.gp_name}_{self.task_id}_{self.seed}_train.pdf")
         pd.DataFrame(res).to_csv(f"../pred_results/{self.task_id}/{self.gp_name}/pred_{self.gp_name}_{self.task_id}_{self.seed}_train.csv")
+
+        test_x = self.test_x
+        test_y = self.test_y
+        gp = self.lolbo_state.model        
+        bsize = self.lolbo_state.bsz
+        num_test = len(test_x)
+        num_batches = math.ceil(num_test / bsize)
+        # squared error
+        pred_se = torch.ones(len(test_x))
+        gp.eval()
+        # marginal loglik
+        mean, std = self.lolbo_state.ymean, self.lolbo_state.ystd
+        mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
+        pred_mll = torch.ones(len(test_x))
+        pred_means = torch.ones(len(test_x))
+        pred_stds = torch.ones(len(test_x))
+        for batch_idx in range(num_batches):
+            print(f"{batch_idx+1}/{num_batches}")
+            batch_lb, batch_ub = batch_idx * bsize, min(num_test, (batch_idx + 1) * bsize)
+            x_batch = test_x[batch_lb: batch_ub]
+            if isinstance(gp.covar_module.base_kernel, ZRBFKernel):
+                _, vae_loss, z_mu, z_sigma = self.objective.vae_forward(x_batch, return_mu_sigma=True)
+                y_batch = test_y[batch_lb:batch_ub].to(z_mu).squeeze(-1)
+                post = gp(z_mu, z_cov=z_sigma, is_z=z_mu)
+                
+            else:
+                z_batch, _, z_mu, z_sigma = self.objective.vae_forward(x_batch, return_mu_sigma=True)
+                y_batch = test_y[batch_lb:batch_ub].to(z_mu).squeeze(-1)
+                post = gp.posterior(z_mu)
+            pred_means[batch_lb: batch_ub] = post.mean.cpu().detach().squeeze(-1)
+            pred_stds[batch_lb: batch_ub] = post.variance.sqrt().cpu().detach().squeeze(-1)
+            pred_se[batch_lb: batch_ub] = torch.pow(post.mean.squeeze(-1) - (y_batch - mean) / std, 2).cpu().detach().squeeze(-1)
+
+            # and for the MLL
+            #pred_mll[batch_lb: batch_ub] = mll(post.mvn, (y_batch - mean) / std).cpu().detach()
+            norm_obs = (y_batch - mean) / std
+
+            pred_mll[batch_lb: batch_ub] = Normal(post.mean.squeeze(-1), post.variance.sqrt().squeeze(-1)).log_prob((norm_obs)).cpu().detach().flatten()
+            
+        mll_mean, mll_median, rmse, median_se = pred_mll.mean().item(), pred_mll.median().item(), pred_se.mean().item(), pred_se.median().item()
+        res = {"mll_mean": [mll_mean], "mll_median": [mll_median], "rmse": rmse, "median_se": median_se}
+        
+        for idx, ls in enumerate(gp.covar_module.base_kernel.lengthscale.flatten()):
+            res[f"ls_{idx}"] = ls.to(torch.float16).item()
+
+        sort_order = torch.sort(test_y.flatten()).indices
+        sorted_output = test_y[sort_order]
+        sorted_means = pred_means[sort_order] * std + mean
+        sorted_stds = pred_stds[sort_order] * std
+
+        diff = sorted_output[-1] - sorted_output[0]
+        range_ = sorted_output[0] - 0.1 * diff, sorted_output[-1] + 0.1 * diff 
+
+        plt.rcParams['font.family'] = 'serif'
+        with torch.no_grad():
+            plt.plot(range_, range_, color='blue', linestyle="dashed")
+            plt.vlines(sorted_output, sorted_means - 2 * sorted_stds, sorted_means + 2 * sorted_stds, color="grey", alpha=0.15, linewidth=0.1)
+            plt.scatter(sorted_output, sorted_means, color="black", s=5)
+        
+        plt.title(f"{self.gp_name}_{self.task_id}_{self.seed}\nRMSE: {round(rmse * std.item(), 5)}, -- MLL: {round(mll_mean, 3)}", fontsize=16)
+        
+        os.makedirs(f"../pred_results/{self.task_id}/{self.gp_name}", exist_ok=True)
+        plt.savefig(f"../pred_results/{self.task_id}/{self.gp_name}/pred_{self.gp_name}_{self.task_id}_{self.seed}_test.pdf")
+        pd.DataFrame(res).to_csv(f"../pred_results/{self.task_id}/{self.gp_name}/pred_{self.gp_name}_{self.task_id}_{self.seed}_test.csv")
 
 
     def print_progress_update(self):
