@@ -6,6 +6,7 @@ sys.path.append("../")
 from lolbo.latent_space_objective import LatentSpaceObjective
 from uniref_vae.data import collate_fn
 from uniref_vae.load_vae import load_uniref_vae 
+from selfies_vae.load_vae import load_selfies_vae
 from your_tasks.your_objective_functions import OBJECTIVE_FUNCTIONS_DICT
 from your_tasks.your_blackbox_constraints import CONSTRAINT_FUNCTIONS_DICT 
 
@@ -94,7 +95,7 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         )
 
 
-    def vae_forward(self, xs_batch, return_mu_sigma: bool = False):
+    def vae_forward(self, xs_batch, return_mu_sigma: bool = False, return_dict: bool = False):
         ''' Input: 
                 a list xs 
             Output: 
@@ -113,6 +114,8 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         z = z.reshape(-1,self.dim) 
         z_mu = z_mu.reshape(-1,self.dim)
         z_sigma = z_sigma.reshape(-1,self.dim)
+        if return_dict:
+            return dict
         if return_mu_sigma:
             return z, vae_loss, z_mu, z_sigma
         return z, vae_loss
@@ -138,14 +141,3 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
 
         return torch.cat(all_cvals, -1)
 
-
-if __name__ == "__main__":
-    # testing your objective
-    obj1 = InfoTransformerVAEObjective() 
-    print(obj1.num_calls) 
-    dict1 = obj1(torch.randn(10,obj1.dim))
-    print(dict1['scores'], obj1.num_calls)
-    dict1 = obj1(torch.randn(3,obj1.dim))
-    print(dict1['scores'], obj1.num_calls)
-    dict1 = obj1(torch.randn(1,obj1.dim))
-    print(dict1['scores'], obj1.num_calls)
