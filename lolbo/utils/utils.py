@@ -69,14 +69,14 @@ def update_models_end_to_end_with_constraints(
     objective.vae.train()
     model.train() 
     optimize_list = [
-        {'params': objective.vae.parameters()},
-        {'params': model.parameters(), 'lr': learning_rte} 
+        {'params': objective.vae.parameters(), 'lr': learning_rte},
+        {'params': model.parameters(), 'lr': learning_rte * 25} 
     ]
     if train_c_scores is not None:
         for c_model in c_models:
             c_model.train() 
             optimize_list.append({f"params": c_model.parameters(), 'lr': learning_rte})
-    optimizer = torch.optim.Adam(optimize_list, lr=learning_rte) 
+    optimizer = torch.optim.Adam(optimize_list) 
 
     # max batch size smaller to avoid memory limit with longer strings (more tokens)
     max_string_length = len(max(train_x, key=len))
@@ -101,11 +101,12 @@ def update_models_end_to_end_with_constraints(
                 _, vae_loss, z_mu, z_sigma = objective.vae_forward(batch_list, return_mu_sigma=train_on_z)
                 if freeze_vae:
                     z_mu = z_mu.detach() 
-                    z_sigma = z_sigma.detach()
+                    z_sigma = z_sigma.detach() # TODO CHECK IF COVARIANCE!
+                    print("Is it really covariance?")
                 #z = MultivariateNormal(z_mu, torch.diag_embed(z_sigma))
                 #z_mu = ZTensor(z_mu)
-                    
-                pred = model(z_mu, z_cov=z_sigma, is_z=z_mu)
+                z_full = torch.cat((z_mu, z_sigma ** 2), dim=-1)
+                pred = model(z_full)
                 
             else:
                 z, vae_loss, z_mu, z_sigma = objective.vae_forward(batch_list, return_mu_sigma=True)

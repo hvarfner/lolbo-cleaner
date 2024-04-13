@@ -337,6 +337,7 @@ class LOLBOState:
         # TODO re-consider this - overwriting for now to just do prediction and not optimization
         train_x = self.train_x
         train_y = self.train_y.squeeze(-1)
+        
         self.objective, self.model = update_models_end_to_end_with_constraints(
             train_x=train_x,
             train_y_scores=train_y,

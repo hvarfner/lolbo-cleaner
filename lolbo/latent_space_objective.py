@@ -85,8 +85,8 @@ class LatentSpaceObjective:
         decoded_xs = np.array(decoded_xs)
         # get valid zs, xs, and scores
         bool_arr = np.logical_not(np.isnan(scores_arr)) 
-        decoded_xs = decoded_xs[bool_arr]
-        scores_arr = scores_arr[bool_arr]
+        decoded_xs = decoded_xs #[bool_arr]
+        scores_arr = scores_arr #[bool_arr]
         valid_zs = z[bool_arr]
 
         out_dict = {}
@@ -94,7 +94,7 @@ class LatentSpaceObjective:
         out_dict['valid_zs'] = valid_zs
         out_dict['decoded_xs'] = decoded_xs
         out_dict['constr_vals'] = self.compute_constraints(decoded_xs)
-
+        out_dict['bool_arr'] = bool_arr
         return out_dict
 
 

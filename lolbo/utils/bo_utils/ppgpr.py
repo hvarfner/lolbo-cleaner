@@ -10,6 +10,9 @@ from lolbo.utils.variational_mods.variational_strategy import (
 from lolbo.utils.variational_mods.unwhitened_variational_strategy import (
      UnwhitenedVariationalStrategy, 
 )
+from lolbo.utils.variational_mods.latent_variational_strategy import (
+     LatentVariationalStrategy, 
+)
 from gpytorch.priors import LogNormalPrior
 from botorch.posteriors.gpytorch import GPyTorchPosterior
 from lolbo.utils.bo_utils.zrbf import ZRBFKernel
@@ -70,7 +73,7 @@ class ZGPModel(ApproximateGP):
         self.covar_module = gpytorch.kernels.ScaleKernel(
              ZRBFKernel(ard_num_dims=dim)
         )
-        self.covar_module.base_kernel.lengthscale = math.sqrt(dim * 2)
+        self.covar_module.base_kernel.lengthscale = math.sqrt(dim)
         self.num_outputs = 1
         self.likelihood = likelihood 
         
@@ -91,7 +94,7 @@ class ZGPModel(ApproximateGP):
     
 
 class VanillaBOGPModel(ApproximateGP):
-    def __init__(self, inducing_points, likelihood, loc: float = 2 ** 0.5, scale: float = 3 ** 0.5):
+    def __init__(self, inducing_points, likelihood, loc: float = 2 ** 0.5, scale: float = 2):
         variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0) )
         variational_strategy = VariationalStrategy(
             self,
@@ -107,10 +110,10 @@ class VanillaBOGPModel(ApproximateGP):
         self.covar_module = gpytorch.kernels.ScaleKernel(
              gpytorch.kernels.RBFKernel(
                 ard_num_dims=dim, 
-                lengthscale_prior=LogNormalPrior(loc=scaled_loc, scale=scale)
+                #lengthscale_prior=LogNormalPrior(loc=scaled_loc, scale=scale)
             )
         )
-        self.covar_module.base_kernel.lengthscale = math.sqrt(dim * 2)
+        self.covar_module.base_kernel.lengthscale = math.sqrt(dim)
         self.num_outputs = 1
         self.likelihood = likelihood 
         
@@ -131,9 +134,9 @@ class VanillaBOGPModel(ApproximateGP):
     
 
 class VanillaBOZGPModel(ApproximateGP):
-    def __init__(self, inducing_points, likelihood, loc: float = 2 ** 0.5, scale: float = 3 ** 0.5):
+    def __init__(self, inducing_points, likelihood, loc: float = 2 ** 0.5, scale: float = 2):
         variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0) )
-        variational_strategy = VariationalStrategy(
+        variational_strategy = LatentVariationalStrategy(
             self,
             inducing_points,
             variational_distribution,
@@ -150,7 +153,7 @@ class VanillaBOZGPModel(ApproximateGP):
                 lengthscale_prior=LogNormalPrior(loc=scaled_loc, scale=scale)
             )
         )
-        self.covar_module.base_kernel.lengthscale = math.sqrt(dim * 2)
+        self.covar_module.base_kernel.lengthscale = math.sqrt(dim)
         self.num_outputs = 1
         self.likelihood = likelihood 
 
@@ -170,8 +173,48 @@ class VanillaBOZGPModel(ApproximateGP):
             return GPyTorchPosterior(mvn=dist)
   
 
+class UnwhitenedVanillaBOGPModel(ApproximateGP):
+    def __init__(self, inducing_points, likelihood, loc: float = 2 ** 0.5, scale: float = 2):
+        variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0) )
+        variational_strategy = UnwhitenedVariationalStrategy(
+            self,
+            inducing_points,
+            variational_distribution,
+            learn_inducing_locations=True
+        )
+        dim = inducing_points.shape[1]
+        
+        super(UnwhitenedVanillaBOGPModel, self).__init__(variational_strategy)
+        self.mean_module = gpytorch.means.ConstantMean()
+        scaled_loc = (loc + math.log(dim) / 2) * 2
+        self.covar_module = gpytorch.kernels.ScaleKernel(
+             gpytorch.kernels.RBFKernel(
+                ard_num_dims=dim, 
+                lengthscale_prior=LogNormalPrior(loc=scaled_loc, scale=scale)
+            )
+        )
+        self.covar_module.base_kernel.lengthscale = math.sqrt(dim)
+        self.num_outputs = 1
+        self.likelihood = likelihood 
+
+    def forward(self, x, **kwargs):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x, **kwargs)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
+    def posterior(
+            self, X, output_indices=None, observation_noise=False, *args, **kwargs
+        ) -> GPyTorchPosterior:
+            self.eval()  # make sure model is in eval mode
+            # self.model.eval()
+            self.likelihood.eval()
+            dist = self.likelihood(self(X)) 
+
+            return GPyTorchPosterior(mvn=dist)
+    
+
 class UnwhitenedVanillaBOZGPModel(ApproximateGP):
-    def __init__(self, inducing_points, likelihood, loc: float = 2 ** 0.5, scale: float = 3 ** 0.5):
+    def __init__(self, inducing_points, likelihood, loc: float = 2 ** 0.5, scale: float = 2):
         variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0) )
         variational_strategy = UnwhitenedVariationalStrategy(
             self,
@@ -190,7 +233,7 @@ class UnwhitenedVanillaBOZGPModel(ApproximateGP):
                 lengthscale_prior=LogNormalPrior(loc=scaled_loc, scale=scale)
             )
         )
-        self.covar_module.base_kernel.lengthscale = math.sqrt(dim * 2)
+        self.covar_module.base_kernel.lengthscale = math.sqrt(dim)
         self.num_outputs = 1
         self.likelihood = likelihood 
 
@@ -208,77 +251,6 @@ class UnwhitenedVanillaBOZGPModel(ApproximateGP):
             dist = self.likelihood(self(X)) 
 
             return GPyTorchPosterior(mvn=dist)
-
-
-class VanillaBONoScaleGPModel(ApproximateGP):
-    def __init__(self, inducing_points, likelihood, loc: float = 2 ** 0.5, scale: float = 3 ** 0.5):
-        variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0) )
-        variational_strategy = VariationalStrategy(
-            self,
-            inducing_points,
-            variational_distribution,
-            learn_inducing_locations=True
-            )
-        dim = inducing_points.shape[1]
-        super(VanillaBOGPModel, self).__init__(variational_strategy)
-        self.mean_module = gpytorch.means.ConstantMean()
-        scaled_loc = (loc + math.log(dim) / 2) * 2
-        self.covar_module = gpytorch.kernels.RBFKernel(
-                ard_num_dims=dim, 
-                lengthscale_prior=LogNormalPrior(loc=scaled_loc, scale=scale)
-        )
-        self.covar_module.base_kernel.lengthscale = scaled_loc
-        self.num_outputs = 1
-        self.likelihood = likelihood 
-
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-    def posterior(
-            self, X, output_indices=None, observation_noise=False, *args, **kwargs
-        ) -> GPyTorchPosterior:
-            self.eval()  # make sure model is in eval mode
-            # self.model.eval()
-            self.likelihood.eval()
-            dist = self.likelihood(self(X)) 
-
-            return GPyTorchPosterior(mvn=dist)
-
-
-class ExactVanillaBOGPModel(ExactGP):
-    def __init__(self, train_x, train_y, likelihood, loc: float = 2 ** 0.5, scale: float = 3 ** 0.5):
-
-        super().__init__(train_x, train_y, likelihood)
-        self.mean_module = gpytorch.means.ConstantMean()
-        scaled_loc = loc + math.log(dim) / 2
-        dim  = train_x.shape[1]
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-             ZRBFKernel(
-                ard_num_dims=dim, 
-                lengthscale_prior=LogNormalPrior(loc=scaled_loc, scale=scale)
-            )
-        )
-        self.covar_module.base_kernel.lengthscale = scaled_loc
-        self.num_outputs = 1
-        self.likelihood = likelihood 
-
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-    def posterior(
-            self, X, output_indices=None, observation_noise=False, *args, **kwargs
-        ) -> GPyTorchPosterior:
-            self.eval()  # make sure model is in eval mode
-            # self.model.eval()
-            self.likelihood.eval()
-            dist = self.likelihood(self(X)) 
-
-            return GPyTorchPosterior(mvn=dist)
-
 
 
 # gp model with deep kernel
