@@ -248,7 +248,7 @@ class InfoTransformerVAE(pl.LightningModule):
         if self.kl_factor != 0:
             primary_loss = primary_loss + self.kl_factor * kldiv
         loss = primary_loss
-
+        
         return dict(
             loss=loss, z=z,
             recon_loss=recon_loss,
