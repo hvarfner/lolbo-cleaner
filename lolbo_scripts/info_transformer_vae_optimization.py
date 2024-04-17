@@ -1,3 +1,4 @@
+import os
 import sys
 sys.path.append("../")
 
@@ -27,15 +28,16 @@ class InfoTransformerVAEOptimization(Optimize):
     """
     def __init__(
         self,
-        path_to_vae_statedict: str = "../uniref_vae/saved_models/dim512_k1_kl0001_acc94_vivid-cherry-17_model_state_newest.pkl",
-        dim: int = 1024,
+        task_id: str,
+        path_to_vae_statedict: str,
+        dim: int,
+        vae_load_function: str,
+        init_dir: str,
+        max_string_length: int = 400,
         task_specific_args: List = [], # list of additional args to be passed into objective funcion 
-        max_string_length: int = 150,
         constraint_function_ids: List = [], # list of strings identifying the black box constraint function to use
         constraint_thresholds: List = [], # list of corresponding threshold values (floats)
         constraint_types: List = [], # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
-        vae_load_function: str = "load_uniref_vae",
-        init_data_path: str = "../initialization_data/example_init_data.csv",
         data_subset: float = 1,
         **kwargs,
     ):
@@ -43,7 +45,7 @@ class InfoTransformerVAEOptimization(Optimize):
         self.dim = dim 
         self.max_string_length = max_string_length
         self.task_specific_args = task_specific_args 
-        self.init_data_path = init_data_path
+        self.init_data_path = init_dir + f"init_{task_id}.csv"
 
         # TODO fix this - currently a rather hacky way to provide the function by which to load the vae
         self.vae_load_function = eval(vae_load_function)
@@ -60,7 +62,7 @@ class InfoTransformerVAEOptimization(Optimize):
         self.constraint_types = constraint_types # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
         self.data_subset = data_subset
 
-        super().__init__(**kwargs)
+        super().__init__(task_id=task_id, **kwargs)
         # add args to method args dict to be logged by wandb 
         self.method_args['opt1'] = locals()
         del self.method_args['opt1']['self']
@@ -135,8 +137,7 @@ class InfoTransformerVAEOptimization(Optimize):
         not_in_indices = not_in_indices.astype(np.bool)
         self.test_x = df.loc[not_in_indices, "x"].to_list() 
         self.test_y = torch.from_numpy(df.loc[not_in_indices, "y"].to_numpy()).float().unsqueeze(-1)
-         
-
+    
 
 if __name__ == "__main__":
     fire.Fire(InfoTransformerVAEOptimization)

@@ -1,3 +1,6 @@
+scripts/container
+result_strings/
+result_values/
 *.sh
 pred_results/
 selfies_vae/init/
