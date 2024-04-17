@@ -48,7 +48,8 @@ class LatentSpaceObjective:
         decoded_xs = self.vae_decode(z)
         scores = []
         xs_to_be_queired = [] 
-        for x in decoded_xs:
+        new_queries = np.zeros(len(z))
+        for idx, x in enumerate(decoded_xs):
             # get rid of X's (deletion)
             # if we have already computed the score, don't 
             #   re-compute (don't call oracle unnecessarily)
@@ -57,8 +58,9 @@ class LatentSpaceObjective:
             else: # otherwise call the oracle to get score
                 score = "?"
                 xs_to_be_queired.append(x)
+                new_queries[idx] = 1
             scores.append(score)
-        
+        new_queries = new_queries.astype(bool)
         computed_scores = self.query_oracle(xs_to_be_queired)
         # move computed scores to scores list 
         temp = [] 
@@ -95,6 +97,7 @@ class LatentSpaceObjective:
         out_dict['decoded_xs'] = decoded_xs
         out_dict['constr_vals'] = self.compute_constraints(decoded_xs)
         out_dict['bool_arr'] = bool_arr
+        out_dict['new_queries'] = new_queries
         return out_dict
 
 

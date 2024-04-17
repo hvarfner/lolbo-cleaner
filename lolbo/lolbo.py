@@ -21,22 +21,25 @@ class LOLBOState:
     def __init__(
         self,
         objective,
-        train_x,
-        train_y,
-        train_z,
-        train_c=None,
-        k=1_000,
-        minimize=False,
-        num_update_epochs=2,
-        init_n_epochs=20,
-        learning_rte=0.01,
-        bsz=16,
-        acq_func='ts',
-        gp: GP = GPModelDKL,
+        train_x: list,
+        train_y: torch.Tensor,
+        train_z: torch.Tensor,
+        train_c: torch.Tensor,
+        k: int,
+        minimize:bool,
+        num_update_epochs: int,
+        init_n_epochs: int,
+        vae_learning_rate: float,
+        gp_learning_rate: float,
+        bsz,
+        acq_func: str,
+        gp: GP,
+        freeze_vae: bool,
+        query_at_recenter: bool,
+        train_from_pretrained: bool, 
         likelihood: Likelihood = PredictiveLogLikelihood,
         verbose=True,
         normalize_y: bool = True,
-        freeze_vae: bool = False,
     ):
         self.objective          = objective         # objective with vae for particular task
         self.train_x            = train_x           # initial train x data
@@ -47,13 +50,16 @@ class LOLBOState:
         self.k                  = k                 # track and update on top k scoring points found
         self.num_update_epochs  = num_update_epochs # num epochs update models
         self.init_n_epochs      = init_n_epochs     # num epochs train surr model on initial data
-        self.learning_rte       = learning_rte      # lr to use for model updates
+        self.vae_learning_rate  = vae_learning_rate
+        self.gp_learning_rate   = gp_learning_rate
         self.bsz                = bsz               # acquisition batch size
         self.acq_func           = acq_func          # acquisition function (Expected Improvement (ei) or Thompson Sampling (ts))
         self.verbose            = verbose
         self.gp                 = gp
         self.freeze_vae         = freeze_vae
-        self.likelihood = likelihood
+        self.likelihood         = likelihood
+        self.query_at_recenter  = query_at_recenter
+        self.train_from_pretrained = train_from_pretrained
         assert acq_func in ["ei", "ts", "logei"]
         if minimize:
             self.orig_train_y = self.orig_train_y * -1
@@ -199,6 +205,20 @@ class LOLBOState:
 
         return self
 
+    def initial_surrogate_model_update(self): 
+        n_epochs = self.init_n_epochs
+        train_z = self.train_z
+        train_y = self.train_y.squeeze(-1)
+        self.model = update_surr_model(
+            self.model,
+            self.mll,
+            self.gp_learning_rate,
+            train_z,
+            train_y,
+            n_epochs
+        )
+
+        return self 
 
     def update_next(
         self,
@@ -206,13 +226,17 @@ class LOLBOState:
         y_next_,
         x_next_,
         c_next_=None,
+        new_queries: np.array = None, 
         acquisition=False
     ):
         '''Add new points (z_next, y_next, x_next) to train data
             and update progress (top k scores found so far)
             and update trust region state
         '''
-        
+        z_next_ = z_next_[new_queries]
+        y_next_ = y_next_[new_queries]
+        x_next_ = x_next_[new_queries]
+
         if c_next_ is not None:
             if len(c_next_.shape) == 1:
                 c_next_ = c_next_.unsqueeze(-1)
@@ -290,7 +314,7 @@ class LOLBOState:
         self.model = update_surr_model(
             self.model,
             self.mll,
-            self.learning_rte,
+            self.gp_learning_rate,
             train_z,
             train_y,
             n_epochs
@@ -299,7 +323,7 @@ class LOLBOState:
             self.c_models = update_constraint_surr_models(
                 self.c_models,
                 self.c_mlls,
-                self.learning_rte,
+                self.gp_learning_rate,
                 train_z,
                 train_c,
                 n_epochs
@@ -313,6 +337,9 @@ class LOLBOState:
     def update_models_e2e(self):
         '''Finetune VAE end to end with surrogate model'''
         self._normalize_y()
+        if self.train_from_pretrained:
+            self.objective.initialize_vae()
+
         self.progress_fails_since_last_e2e = 0
         new_xs = self.train_x[-self.bsz:]
         new_ys = self.train_y[-self.bsz:].squeeze(-1).tolist()
@@ -344,7 +371,8 @@ class LOLBOState:
             objective=self.objective,
             model=self.model,
             mll=self.mll,
-            learning_rte=self.learning_rte,
+            vae_learning_rate=self.vae_learning_rate,
+            gp_learning_rate=self.gp_learning_rate,
             num_update_epochs=self.num_update_epochs,
             train_c_scores=train_c,
             c_models=c_models,
@@ -361,17 +389,18 @@ class LOLBOState:
             VAE to find new locations in the
             new fine-tuned latent space
         '''
+        
         self.objective.vae.eval()
         self.model.train()
 
         optimize_list = [
-            {'params': self.model.parameters(), 'lr': self.learning_rte} 
+            {'params': self.model.parameters(), 'lr': self.gp_learning_rate} 
         ]
         if self.train_c is not None:
             for c_model in self.c_models:
                 c_model.train() 
-                optimize_list.append({f"params": c_model.parameters(), 'lr': self.learning_rte})
-        optimizer1 = torch.optim.Adam(optimize_list, lr=self.learning_rte) 
+                optimize_list.append({f"params": c_model.parameters(), 'lr': self.gp_learning_rate})
+        optimizer1 = torch.optim.Adam(optimize_list) 
         new_xs = self.train_x[-self.bsz:]
         train_x = new_xs + self.top_k_xs
         max_string_len = len(max(train_x, key=len))
@@ -391,6 +420,7 @@ class LOLBOState:
                     constraints_tensor = out_dict['constr_vals']
                     valid_zs = out_dict['valid_zs']
                     xs_list = out_dict['decoded_xs']
+                    new_queries = out_dict['new_queries']
                 if len(scores_arr) > 0: # if some valid scores
                     scores_arr = torch.from_numpy(scores_arr)
                     if self.minimize:
@@ -405,14 +435,16 @@ class LOLBOState:
                     loss.backward() 
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                     optimizer1.step() 
-                    with torch.no_grad(): 
+                    with torch.no_grad():
                         z = z.detach().cpu()
                         self.update_next(
                             z,
                             scores_arr,
                             xs_list,
-                            c_next_=constraints_tensor
+                            c_next_=constraints_tensor,
+                            new_queries=new_queries,
                         )
+                    # TODO the locations of the old Zs don't actually change here!
             torch.cuda.empty_cache()
         self.model.eval() 
         if self.train_c is not None:
@@ -448,6 +480,7 @@ class LOLBOState:
             y_next = out_dict['scores']
             x_next = out_dict['decoded_xs']     
             c_next = out_dict['constr_vals']  
+            new_queries = out_dict['new_queries']
             if self.minimize:
                 y_next = y_next * -1
         # 3. Add new evaluated points to dataset (update_next)
@@ -458,6 +491,7 @@ class LOLBOState:
                 y_next,
                 x_next,
                 c_next,
+                new_queries=new_queries,
                 acquisition=True
             )
         else:

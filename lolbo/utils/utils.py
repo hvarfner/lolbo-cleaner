@@ -12,7 +12,8 @@ def update_models_end_to_end_unconstrained(
     objective,
     model,
     mll,
-    learning_rte,
+    vae_learning_rate,
+    gp_learning_rate,
     num_update_epochs,
 ):
     '''Finetune VAE end to end with surrogate model
@@ -21,9 +22,11 @@ def update_models_end_to_end_unconstrained(
     '''
     objective.vae.train()
     model.train() 
-    optimizer = torch.optim.Adam([
-            {'params': objective.vae.parameters()},
-            {'params': model.parameters(), 'lr': learning_rte} ], lr=learning_rte)
+    optimize_list = [
+        {'params': objective.vae.parameters(), 'lr': vae_learning_rate},
+        {'params': model.parameters(), 'lr': gp_learning_rate} 
+    ]
+    optimizer = torch.optim.Adam(optimize_list)
     # max batch size smaller to avoid memory limit with longer strings (more tokens)
     max_string_length = len(max(train_x, key=len))
     bsz = max(1, int(2560/max_string_length)) 
@@ -55,7 +58,8 @@ def update_models_end_to_end_with_constraints(
     objective,
     model,
     mll,
-    learning_rte,
+    vae_learning_rate,
+    gp_learning_rate,
     num_update_epochs,
     train_c_scores=None,
     c_models=[],
@@ -69,19 +73,19 @@ def update_models_end_to_end_with_constraints(
     objective.vae.train()
     model.train() 
     optimize_list = [
-        {'params': objective.vae.parameters(), 'lr': learning_rte},
-        {'params': model.parameters(), 'lr': learning_rte * 25} 
+        {'params': objective.vae.parameters(), 'lr': vae_learning_rate},
+        {'params': model.parameters(), 'lr': gp_learning_rate} 
     ]
     if train_c_scores is not None:
         for c_model in c_models:
             c_model.train() 
-            optimize_list.append({f"params": c_model.parameters(), 'lr': learning_rte})
+            optimize_list.append({f"params": c_model.parameters(), 'lr': gp_learning_rate})
     optimizer = torch.optim.Adam(optimize_list) 
 
     # max batch size smaller to avoid memory limit with longer strings (more tokens)
     max_string_length = len(max(train_x, key=len))
     bsz = max(1, int(2560/max_string_length)) 
-    bsz     = 16
+    bsz     = 32
     num_batches = math.ceil(len(train_x) / bsz)
 
     # This is the new kernel, checking for it here to do the alternative training
@@ -90,7 +94,6 @@ def update_models_end_to_end_with_constraints(
     for ep in range(num_update_epochs):
         
         for batch_ix in range(num_batches):
-            print(f"{ep+1}/{num_update_epochs} -- {batch_ix+1}/{num_batches}")
             start_idx, stop_idx = batch_ix*bsz, (batch_ix+1)*bsz
             batch_list = train_x[start_idx:stop_idx]
             batch_y = train_y_scores[start_idx:stop_idx]
@@ -101,17 +104,14 @@ def update_models_end_to_end_with_constraints(
                 _, vae_loss, z_mu, z_sigma = objective.vae_forward(batch_list, return_mu_sigma=train_on_z)
                 if freeze_vae:
                     z_mu = z_mu.detach() 
-                    z_sigma = z_sigma.detach() # TODO CHECK IF COVARIANCE!
-                    print("Is it really covariance?")
-                #z = MultivariateNormal(z_mu, torch.diag_embed(z_sigma))
-                #z_mu = ZTensor(z_mu)
+                    z_sigma = z_sigma.detach()
                 z_full = torch.cat((z_mu, z_sigma ** 2), dim=-1)
                 pred = model(z_full)
                 
             else:
-                z, vae_loss, z_mu, z_sigma = objective.vae_forward(batch_list, return_mu_sigma=True)
-                z = z.detach()
-                pred = model(z_mu)
+                z, vae_loss, z_mu, z_sigma, token_loss, string_loss = objective.vae_forward(batch_list, return_losses=True)
+                #print("Inside e2e", token_loss, string_loss)
+                pred = model(z)
             
             surr_loss = -mll(pred, batch_y.cuda())
             
@@ -124,6 +124,7 @@ def update_models_end_to_end_with_constraints(
                     surr_loss = surr_loss + loss_cmodel_ix
 
             # add losses and back prop         
+            #print(surr_loss, vae_loss)
             loss = surr_loss + vae_loss
             
             optimizer.zero_grad()
@@ -143,13 +144,13 @@ def update_models_end_to_end_with_constraints(
 def update_surr_model(
     model,
     mll,
-    learning_rte,
+    gp_learning_rate,
     train_z,
     train_y,
     n_epochs
 ):
     model = model.train() 
-    optimizer = torch.optim.Adam([{'params': model.parameters(), 'lr': learning_rte} ], lr=learning_rte)
+    optimizer = torch.optim.Adam([{'params': model.parameters(), 'lr': gp_learning_rate}])
     train_bsz = min(len(train_y),128)
     train_dataset = TensorDataset(train_z.cuda(), train_y.cuda())
     train_loader = DataLoader(train_dataset, batch_size=train_bsz, shuffle=True)
@@ -169,7 +170,7 @@ def update_surr_model(
 def update_constraint_surr_models(
     c_models,
     c_mlls,
-    learning_rte,
+    gp_learning_rate,
     train_z,
     train_c,
     n_epochs,
@@ -179,7 +180,7 @@ def update_constraint_surr_models(
         updated_model = update_surr_model(
             c_model,
             c_mlls[ix],
-            learning_rte,
+            gp_learning_rate,
             train_z,
             train_c[:,ix],
             n_epochs

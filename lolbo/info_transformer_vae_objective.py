@@ -95,7 +95,12 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         )
 
 
-    def vae_forward(self, xs_batch, return_mu_sigma: bool = False, return_dict: bool = False):
+    def vae_forward(self, 
+        xs_batch, 
+        return_mu_sigma: bool = False, 
+        return_dict: bool = False, 
+        return_losses: bool = False
+    ):
         ''' Input: 
                 a list xs 
             Output: 
@@ -114,10 +119,13 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         z = z.reshape(-1,self.dim) 
         z_mu = z_mu.reshape(-1,self.dim)
         z_sigma = z_sigma.reshape(-1,self.dim)
+        token_loss, string_loss = dict["recon_token_acc"].item(), dict["recon_string_acc"].item()
         if return_dict:
             return dict
         if return_mu_sigma:
             return z, vae_loss, z_mu, z_sigma
+        if return_losses:
+            return z, vae_loss, z_mu, z_sigma, token_loss, string_loss
         return z, vae_loss
 
     # black box constraint, treat as oracle 
