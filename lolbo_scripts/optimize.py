@@ -239,6 +239,7 @@ class Optimize(object):
             #   progress e2e_freq times in a row (e2e_freq=10 by default)
             if (self.lolbo_state.progress_fails_since_last_e2e >= self.e2e_freq) and self.update_e2e:
                 if not self.recenter_only:
+                    self.save_to_csv()
                     self.lolbo_state.update_models_e2e()
                 self.lolbo_state.recenter()
                 if self.recenter_only:
@@ -247,6 +248,7 @@ class Optimize(object):
                 self.lolbo_state.update_surrogate_model()
             # generate new candidate points, evaluate them, and update data
             self.lolbo_state.acquisition()
+            self.save_to_csv()
             if self.lolbo_state.tr_state.restart_triggered:
                 self.lolbo_state.initialize_tr_state()
             # if a new best has been found, print out new best input and score:
@@ -258,8 +260,8 @@ class Optimize(object):
             if (self.lolbo_state.objective.num_calls - last_logged_n_calls) >= self.log_table_freq:
                 self.final_save = False 
                 self.log_topk_table_wandb()
-                last_logged_n_calls = self.lolbo_state.objective.num_calls
-
+                last_logged_n_calls = self.lolbo_state.objective.num_calls  
+        self.save_to_csv()
 
         # if verbose, print final results 
         if self.verbose:

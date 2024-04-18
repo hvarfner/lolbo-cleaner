@@ -281,7 +281,6 @@ class LOLBOState:
         y_next_ = y_next_.unsqueeze(-1)
         
         if acquisition:
-            print(len(y_next_))
             if len(y_next_) == 0: # only duplicate queries, will count as a fail
                 self.tr_state = update_state(
                     state=self.tr_state,
