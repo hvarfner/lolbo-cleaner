@@ -153,6 +153,7 @@ def generate_batch(
     device=torch.device('cuda'),
     absolute_bounds=None, 
     constraint_model_list=None,
+    ls_tr_ratio: float = 1 / 6
 ):
 
     assert acqf in ("ts", "ei")
@@ -176,6 +177,11 @@ def generate_batch(
         weights = weights * (ub - lb)
         tr_lb = torch.clamp(x_center - weights * state.length / 2.0, lb, ub) 
         tr_ub = torch.clamp(x_center + weights * state.length / 2.0, lb, ub) 
+
+    if model.covar_module.base_kernel.lengthscale.shape[-1] > 1:
+        ls = model.covar_module.base_kernel.lengthscale
+        tr_lb = x_center.to(ls) - ls / ls_tr_ratio # The default size of the 
+        tr_ub = x_center.to(ls) + ls / ls_tr_ratio # The default size of the 
 
     if acqf == "ei":
         try:
