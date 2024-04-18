@@ -77,7 +77,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--experiment_group", default="test")
     parser.add_argument("--project", default="NAISS2024-22-232 -p alvis")
-    parser.add_argument("--gpus", default="T4:1") #Ours
+    parser.add_argument("--gpus", default="A40:1") #Ours
     parser.add_argument("--time", default="8:00:00")
     parser.add_argument("--job_name", default="test")
     parser.add_argument("--memory", default=0, type=int)
