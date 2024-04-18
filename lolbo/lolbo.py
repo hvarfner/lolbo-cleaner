@@ -279,12 +279,21 @@ class LOLBOState:
         if (not progress) and acquisition: # if no progress msde, increment progress fails
             self.progress_fails_since_last_e2e += 1
         y_next_ = y_next_.unsqueeze(-1)
+        
         if acquisition:
-            self.tr_state = update_state(
-                state=self.tr_state,
-                Y_next=y_next_,
-                C_next=c_next_,
-            )
+            print(len(y_next_))
+            if len(y_next_) == 0: # only duplicate queries, will count as a fail
+                self.tr_state = update_state(
+                    state=self.tr_state,
+                    Y_next=torch.Tensor([self.train_y.min().item()]).unsqueeze(-1),
+                    C_next=None,
+                )
+            else:
+                self.tr_state = update_state(
+                    state=self.tr_state,
+                    Y_next=y_next_,
+                    C_next=c_next_,
+                )
         self.train_z = torch.cat((self.train_z, z_next_), dim=-2)
         self.orig_train_y = torch.cat((self.orig_train_y, y_next_), dim=-2)
         if c_next_ is not None:

@@ -15,8 +15,10 @@ plt.rcParams['font.family'] = 'serif'
 
 COLORS = {
     "dkl_ts": "red",
+    "dkl": "red",
     "vanilla_ts": "blue", 
     "vanilla_ei": "green", 
+    "vanilla": "blue", 
 }
 
 
@@ -37,8 +39,10 @@ NICE_BENCH_NAMES = {
 
 NICE_METHOD_NAMES = {
     "dkl_ts": "LOLBO",
+    "dkl": "LOLBO",
     "vanilla_ei": "Vanilla BO (EI)",
     "vanilla_ts": "Vanilla BO (TS)",
+    "vanilla": "Vanilla BO (TS)",
     "unvanilla": "Unwhitened Vanilla BO",
     "unzvanilla": "$Unwhitened  k_{Henry}$",
     }
@@ -86,7 +90,7 @@ def plot_results(
     bench_paths = glob(join(path, "*"))
     if benchmarks is not None:
         bench_paths = filter_benchmark_or_method(bench_paths, benchmarks)
-    
+
     for bench in bench_paths:
         bench_name = bench.split("/")[-1]
         #bench_name = NICE_BENCH_NAMES.get(bench_name, bench_name)

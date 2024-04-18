@@ -87,10 +87,10 @@ class LatentSpaceObjective:
         decoded_xs = np.array(decoded_xs)
         # get valid zs, xs, and scores
         bool_arr = np.logical_not(np.isnan(scores_arr)) 
-        decoded_xs = decoded_xs #[bool_arr]
-        scores_arr = scores_arr #[bool_arr]
+        decoded_xs = decoded_xs[bool_arr] #[bool_arr]
+        scores_arr = scores_arr[bool_arr] #[bool_arr]
         valid_zs = z[bool_arr]
-
+        new_queries = new_queries[bool_arr]
         out_dict = {}
         out_dict['scores'] = scores_arr
         out_dict['valid_zs'] = valid_zs
