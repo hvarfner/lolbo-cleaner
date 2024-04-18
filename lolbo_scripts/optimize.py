@@ -117,7 +117,7 @@ class Optimize(object):
             assert not self.track_with_wandb, "Failed to import wandb, to track with wandb, try pip install wandb"
         if self.track_with_wandb:
             assert self.wandb_entity, "Must specify a valid wandb account username (wandb_entity) to run with wandb tracking"
-
+        
         # initialize train data for particular task
         #   must define self.init_train_x, self.init_train_y, and self.init_train_z
         self.load_train_data(seed=self.seed)
@@ -234,7 +234,7 @@ class Optimize(object):
         last_logged_n_calls = 0 # log table + save vae ckpt every log_table_freq oracle calls
         #main optimization loop
         while self.lolbo_state.objective.num_calls < self.max_n_oracle_calls:
-            self.log_data_to_wandb_on_each_loop()
+            #self.log_data_to_wandb_on_each_loop()
             # update models end to end when we fail to make
             #   progress e2e_freq times in a row (e2e_freq=10 by default)
             if (self.lolbo_state.progress_fails_since_last_e2e >= self.e2e_freq) and self.update_e2e:
@@ -269,9 +269,9 @@ class Optimize(object):
             self.print_progress_update()
 
         # log top k scores and xs in table
-        self.final_save = True 
-        self.log_topk_table_wandb()
-        self.tracker.finish()
+        #self.final_save = True 
+        #self.log_topk_table_wandb()
+        #self.tracker.finish()
 
         return self 
 
@@ -542,15 +542,17 @@ class Optimize(object):
             model_save_path = save_dir + self.wandb_project_name + '_' + wandb.run.name + f'_finedtuned_vae_state_after_{n_calls}evals.pkl'  
             torch.save(model.state_dict(), model_save_path) 
 
-        save_dir = 'optimization_all_collected_data/'
-        if not os.path.exists(save_dir):
-            os.mkdir(save_dir)
-        file_path = save_dir + self.wandb_project_name + '_' + wandb.run.name + '_all-data-collected.csv'
-        df = {}
-        df['train_x'] = np.array(self.lolbo_state.train_x)
-        df['train_y'] = self.lolbo_state.train_y.squeeze().detach().cpu().numpy()  
-        df = pd.DataFrame.from_dict(df)
-        df.to_csv(file_path, index=None) 
+        if self.track_with_wandb and self.final_save:
+        
+            save_dir = 'optimization_all_collected_data/'
+            if not os.path.exists(save_dir):
+                os.mkdir(save_dir)
+            file_path = save_dir + self.wandb_project_name + '_' + wandb.run.name + '_all-data-collected.csv'
+            df = {}
+            df['train_x'] = np.array(self.lolbo_state.train_x)
+            df['train_y'] = self.lolbo_state.train_y.squeeze().detach().cpu().numpy()  
+            df = pd.DataFrame.from_dict(df)
+            df.to_csv(file_path, index=None) 
 
         return self
 

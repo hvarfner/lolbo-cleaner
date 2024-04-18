@@ -114,7 +114,7 @@ class LOLBOState:
             valid_train_x = self.train_x 
 
         if len(vaid_train_y) > 1:
-            self.best_score_seen = torch.max(vaid_train_y)
+            self.best_score_seen = torch.max(self.orig_train_y)
             self.best_x_seen = valid_train_x[torch.argmax(vaid_train_y.squeeze())]
 
             # track top k scores found 
@@ -347,7 +347,7 @@ class LOLBOState:
         self._normalize_y()
         if self.train_from_pretrained:
             self.objective.initialize_vae()
-
+        
         self.progress_fails_since_last_e2e = 0
         new_xs = self.train_x[-self.bsz:]
         new_ys = self.train_y[-self.bsz:].squeeze(-1).tolist()
@@ -414,9 +414,10 @@ class LOLBOState:
         max_string_len = len(max(train_x, key=len))
         # max batch size smaller to avoid memory limit 
         #   with longer strings (more tokens) 
-        bsz = max(1, int(2560/max_string_len))
+        bsz = max(1, int(2560 * 2/max_string_len))
+
         num_batches = math.ceil(len(train_x) / bsz) 
-        for _ in range(self.num_update_epochs):
+        for ep in range(self.num_update_epochs):
             for batch_ix in range(num_batches):
                 optimizer1.zero_grad() 
                 with torch.no_grad(): 

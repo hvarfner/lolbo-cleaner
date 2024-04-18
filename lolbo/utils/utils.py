@@ -84,13 +84,11 @@ def update_models_end_to_end_with_constraints(
 
     # max batch size smaller to avoid memory limit with longer strings (more tokens)
     max_string_length = len(max(train_x, key=len))
-    bsz = max(1, int(2560/max_string_length)) 
-    bsz     = 32
+    bsz = max(1, int(2560 * 2/max_string_length)) 
     num_batches = math.ceil(len(train_x) / bsz)
 
     # This is the new kernel, checking for it here to do the alternative training
     train_on_z = isinstance(model.covar_module.base_kernel, ZRBFKernel)
-    
     for ep in range(num_update_epochs):
         
         for batch_ix in range(num_batches):
@@ -98,7 +96,6 @@ def update_models_end_to_end_with_constraints(
             batch_list = train_x[start_idx:stop_idx]
             batch_y = train_y_scores[start_idx:stop_idx]
             batch_y = torch.tensor(batch_y).float() 
-
             # This is also only for the new training loop - please disregard
             if train_on_z:
                 _, vae_loss, z_mu, z_sigma = objective.vae_forward(batch_list, return_mu_sigma=train_on_z)
