@@ -66,7 +66,7 @@ def construct_script(args, cluster_oe_dir):
         # The optional arguments for this specific task
         f"${{ARGS[@]:{len(args.arguments)}*$SLURM_ARRAY_TASK_ID:{len(args.arguments)}}}"
         f" --vae_load_function load_selfies_vae --dim 256 --path_to_vae_statedict $VAE_PATH --init_dir $INIT_PATH" 
-        f"- run_lolbo - done"
+        f" - run_lolbo - done"
         # The mandatory arguments for this specific task
     )
 
